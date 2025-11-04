@@ -1,0 +1,28 @@
+[package]
+name = "sanctum"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.6"
+base64 = "0.22.1"
+opaque-ke = { version = "4.0.0", features = ["argon2", "ristretto255"] }
+rand = "0.8"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.10.9"
+tokio = { version = "1.48.0", features = ["full", "rt"] }
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
+sanctum-shared = { path = "../sanctum-shared" }
+sqlx = { version = "0.8", features = [ "runtime-tokio", "tls-native-tls", "postgres", "uuid", "time" ] }
+redis = { version = "0.32.7", features = ["tokio-comp", "connection-manager", "aio"] }
+dotenvy = "0.15.7"
+jsonwebtoken = { version = "10.1.0", features = ["aws_lc_rs"] }
+axum-extra = { version = "0.12.1", features = ["typed-header"] }
+time = "0.3.44"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tracing = "0.1.41"
+tower-http = { version = "0.6.6", features = ["trace"] }
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3

@@ -1,0 +1,5 @@
+DROP TABLE records;
+DROP TABLE vaults;
+DROP TABLE users;
+
+DROP EXTENSION IF EXISTS "pgcrypto";

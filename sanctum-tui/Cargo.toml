@@ -1,0 +1,18 @@
+[package]
+name = "sanctum-tui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+argon2 = "0.5.3"
+color-eyre = "0.6.5"
+crossterm = "0.29.0"
+opaque-ke = "4.0.0"
+rand = "0.8"
+ratatui = "0.29.0"
+reqwest = { version = "0.12.24", features = ["blocking", "json"] }
+serde_json = "1.0.145"
+time = { version = "0.3.44", features = ["serde"] }
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
+sanctum-shared = { path = "../sanctum-shared" }
+base64 = "0.22.1"

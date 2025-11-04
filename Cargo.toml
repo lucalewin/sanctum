@@ -1,0 +1,3 @@
+[workspace]
+members = ["sanctum", "sanctum-shared", "sanctum-tui"]
+resolver = "3"
