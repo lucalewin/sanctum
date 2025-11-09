@@ -22,6 +22,7 @@ pub struct RegistrationFinishRequest {
     /// The email needs to be the same as the one
     /// used in the [`RegistrationStartRequest::email`].
     pub email: String,
+    pub salt: String,
     pub client_finish: String,
 }
 
@@ -49,6 +50,7 @@ pub struct LoginFinishRequest {
 #[derive(Serialize, Deserialize)]
 pub struct LoginFinishResponse {
     pub access_token: String,
+    pub salt: String,
     // TODO: add refresh_token and other nice stuff
 }
 

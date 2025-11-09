@@ -1,6 +1,5 @@
 use std::error::Error;
 
-use bytes::Bytes;
 use opaque_ke::{
     ClientLogin, ClientLoginFinishParameters, CredentialFinalization, CredentialRequest,
     CredentialResponse, ServerLogin, ServerLoginParameters, ServerRegistration, ServerSetup,

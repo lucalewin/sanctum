@@ -9,21 +9,25 @@ use axum::{
 use sanctum_shared::models::{CreateRecordRequest, CreateVaultRequest, Record, Vault};
 use uuid::Uuid;
 
-use crate::{AppStateRef, middleware::Session};
+use crate::{
+    AppStateRef,
+    middleware::{OwnedVault, Session},
+    vault,
+};
 
 pub fn routes() -> Router<AppStateRef> {
     Router::new()
-        .route("/vault", get(list_vaults).post(create_vault))
+        .route("/vaults", get(list_vaults).post(create_vault))
         .route(
-            "/vault/{vault_id}",
+            "/vaults/{vault_id}",
             get(get_vault).put(update_vault).delete(delete_vault),
         )
         .route(
-            "/vault/{vault_id}/records",
+            "/vaults/{vault_id}/records",
             get(list_records).post(create_record),
         )
         .route(
-            "/vault/{vault_id}/records/{record_id}",
+            "/vaults/{vault_id}/records/{record_id}",
             get(get_record).put(update_record).delete(delete_record),
         )
 }
@@ -64,11 +68,18 @@ async fn create_vault(
 async fn get_vault(
     State(state): State<AppStateRef>,
     Session(user_id): Session,
+    Path(vault_id): Path<Uuid>,
 ) -> Result<(StatusCode, Json<Vault>), StatusCode> {
-    let vault = sqlx::query_as!(Vault, "SELECT * FROM vaults WHERE user_id = $1", user_id)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let vault = sqlx::query_as!(
+        Vault,
+        "SELECT * FROM vaults WHERE id = $1 AND user_id = $2",
+        vault_id,
+        user_id
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
 
     Ok((StatusCode::OK, Json(vault)))
 }
@@ -104,28 +115,12 @@ async fn delete_vault(
 
 async fn list_records(
     State(state): State<AppStateRef>,
-    Path(vault_id): Path<Uuid>,
-    Session(user_id): Session,
+    OwnedVault(vault): OwnedVault,
 ) -> Result<(StatusCode, Json<Vec<Record>>), StatusCode> {
-    // check if the user owns the vault
-    let vault = sqlx::query_as!(
-        Vault,
-        "SELECT * FROM vaults WHERE id = $1 AND user_id = $2",
-        vault_id,
-        user_id
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    if vault.is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
     let records = sqlx::query_as!(
         Record,
         "SELECT * FROM records WHERE vault_id = $1",
-        vault_id,
+        vault.id,
     )
     .fetch_all(&state.db)
     .await
@@ -136,29 +131,13 @@ async fn list_records(
 
 async fn create_record(
     State(state): State<AppStateRef>,
-    Path(vault_id): Path<Uuid>,
-    Session(user_id): Session,
+    OwnedVault(vault): OwnedVault,
     Json(payload): Json<CreateRecordRequest>,
 ) -> Result<(StatusCode, Json<Record>), StatusCode> {
-    // check if the user owns the vault
-    let vault = sqlx::query_as!(
-        Vault,
-        "SELECT * FROM vaults WHERE id = $1 AND user_id = $2",
-        vault_id,
-        user_id
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    if vault.is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
     let record = sqlx::query_as!(
         Record,
         "INSERT INTO records (vault_id, encrypted_record_key, encrypted_data_blob) VALUES ($1, $2, $3) RETURNING *",
-        vault_id,
+        vault.id,
         payload.encrypted_record_key,
         payload.encrypted_data_blob
     )
@@ -171,33 +150,19 @@ async fn create_record(
 
 async fn get_record(
     State(state): State<AppStateRef>,
-    Path((vault_id, record_id)): Path<(Uuid, Uuid)>,
-    Session(user_id): Session,
+    Path(record_id): Path<Uuid>,
+    OwnedVault(vault): OwnedVault,
 ) -> Result<(StatusCode, Json<Record>), StatusCode> {
-    // check if the user owns the vault
-    let vault = sqlx::query_as!(
-        Vault,
-        "SELECT * FROM vaults WHERE id = $1 AND user_id = $2",
-        vault_id,
-        user_id
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    if vault.is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
     let record = sqlx::query_as!(
         Record,
         "SELECT * FROM records WHERE vault_id = $1 AND id = $2",
-        vault_id,
+        vault.id,
         record_id
     )
-    .fetch_one(&state.db)
+    .fetch_optional(&state.db)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
 
     Ok((StatusCode::OK, Json(record)))
 }
@@ -212,27 +177,12 @@ async fn update_record(
 
 async fn delete_record(
     State(state): State<AppStateRef>,
-    Path((vault_id, record_id)): Path<(Uuid, Uuid)>,
-    Session(user_id): Session,
+    Path(record_id): Path<Uuid>,
+    OwnedVault(vault): OwnedVault,
 ) -> Result<StatusCode, StatusCode> {
-    // check if the user owns the vault
-    let vault = sqlx::query_as!(
-        Vault,
-        "SELECT * FROM vaults WHERE id = $1 AND user_id = $2",
-        vault_id,
-        user_id
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    if vault.is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
     sqlx::query!(
         "DELETE FROM records WHERE vault_id = $1 AND id = $2",
-        vault_id,
+        vault.id,
         record_id
     )
     .execute(&state.db)

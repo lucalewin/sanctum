@@ -69,8 +69,9 @@ pub async fn register_finish(
     let encoded_password_file = BASE64_STANDARD.encode(password_file);
 
     sqlx::query!(
-        "INSERT INTO users (email, password_file) VALUES ($1, $2)",
+        "INSERT INTO users (email, salt, password_file) VALUES ($1, $2, $3)",
         normalize_email(&payload.email),
+        payload.salt,
         encoded_password_file
     )
     .execute(&state.db)
@@ -79,6 +80,10 @@ pub async fn register_finish(
 
     Ok(StatusCode::CREATED)
 }
+
+// ------------------------------------------------------------------------------------------------
+//                                             Login
+// ------------------------------------------------------------------------------------------------
 
 pub async fn login_start(
     State(state): State<AppStateRef>,
@@ -166,9 +171,9 @@ pub async fn login_finish(
         sub: user.id.to_string(),
         exp: expires.unix_timestamp() as u64,
         iat: now.unix_timestamp() as u64,
-        iss: "SanctumPass".into(),
+        iss: "https://sanctum.lucalewin.dev".into(),
         nbf: now.unix_timestamp() as u64,
-        aud: "SanctumPass".into(),
+        aud: "https://sanctum.lucalewin.dev".into(),
         jti: uuid::Uuid::new_v4().to_string(),
     };
 
@@ -181,5 +186,6 @@ pub async fn login_finish(
 
     Ok(Json(LoginFinishResponse {
         access_token: token,
+        salt: user.salt,
     }))
 }
