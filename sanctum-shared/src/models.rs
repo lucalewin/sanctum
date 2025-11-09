@@ -65,6 +65,7 @@ pub struct Vault {
     pub encrypted_vault_key: String,
     pub encrypted_name: String,
     pub created_at: UtcDateTime,
+    pub updated_at: UtcDateTime,
 }
 
 #[derive(Serialize, Deserialize)]
