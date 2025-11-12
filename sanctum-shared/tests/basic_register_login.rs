@@ -2,7 +2,7 @@ use base64::{Engine, prelude::BASE64_STANDARD};
 use opaque_ke::ServerSetup;
 use rand::rngs::OsRng;
 
-use crate::DefaultCipherSuite;
+use sanctum_shared::DefaultCipherSuite;
 
 #[test]
 fn both() {
@@ -15,17 +15,21 @@ fn both() {
 
     let password_file = {
         // client
-        let (client_state, message) = super::register::client_start(&password.as_bytes()).unwrap();
+        let (client_state, message) =
+            sanctum_shared::register::client_start(&password.as_bytes()).unwrap();
         // server
         let server_message =
-            super::register::server_start(&setup, &email.as_bytes(), &message).unwrap();
+            sanctum_shared::register::server_start(&setup, &email.as_bytes(), &message).unwrap();
 
         // client
-        let client_message =
-            super::register::client_finish(&password.as_bytes(), &client_state, &server_message)
-                .unwrap();
+        let client_message = sanctum_shared::register::client_finish(
+            &password.as_bytes(),
+            &client_state,
+            &server_message,
+        )
+        .unwrap();
         // server
-        super::register::server_finish(&client_message).unwrap()
+        sanctum_shared::register::server_finish(&client_message).unwrap()
     };
 
     let encoded = BASE64_STANDARD.encode(password_file);
@@ -43,15 +47,21 @@ fn both() {
     // let password = "password";
 
     // client
-    let (client_state, client_message) = super::login::client_start(&password.as_bytes()).unwrap();
+    let (client_state, client_message) =
+        sanctum_shared::login::client_start(&password.as_bytes()).unwrap();
     // server
-    let (server_state, server_message) =
-        super::login::server_start(&setup, &email.as_bytes(), &password_file, &client_message)
-            .unwrap();
+    let (server_state, server_message) = sanctum_shared::login::server_start(
+        &setup,
+        &email.as_bytes(),
+        &password_file,
+        &client_message,
+    )
+    .unwrap();
 
     // client
     let client_message =
-        super::login::client_finish(&password.as_bytes(), &client_state, &server_message).unwrap();
+        sanctum_shared::login::client_finish(&password.as_bytes(), &client_state, &server_message)
+            .unwrap();
     // server
-    super::login::server_finish(&client_message, &server_state).unwrap();
+    sanctum_shared::login::server_finish(&client_message, &server_state).unwrap();
 }

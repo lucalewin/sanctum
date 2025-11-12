@@ -1,8 +1,6 @@
 pub mod login;
 pub mod models;
 pub mod register;
-#[cfg(test)]
-mod test;
 
 use opaque_ke::{CipherSuite, argon2::Argon2};
 
