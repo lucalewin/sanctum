@@ -53,9 +53,9 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .with_state(Arc::new(state));
 
-    tracing::info!("Starting server on http://127.0.0.1:3000");
+    tracing::info!("Starting server on http://0.0.0.0:3000");
 
-    let listener = TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
