@@ -2550,9 +2550,11 @@ dependencies = [
  "rand",
  "ratatui",
  "reqwest",
+ "sanctum-client",
  "sanctum-shared",
  "serde_json",
  "time",
+ "tokio",
  "uuid",
 ]
 
