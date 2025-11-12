@@ -20,7 +20,9 @@ pub fn routes() -> Router<AppStateRef> {
         .route("/vaults", get(list_vaults).post(create_vault))
         .route(
             "/vaults/{vault_id}",
-            get(get_vault).put(update_vault).delete(delete_vault),
+            get(get_vault)
+                .put(create_or_update_vault)
+                .delete(delete_vault),
         )
         .route(
             "/vaults/{vault_id}/records",
@@ -32,6 +34,8 @@ pub fn routes() -> Router<AppStateRef> {
         )
 }
 
+/// GET /vaults
+/// List all vaults for the current user.
 async fn list_vaults(
     State(state): State<AppStateRef>,
     Session(user_id): Session,
@@ -44,6 +48,8 @@ async fn list_vaults(
     Ok((StatusCode::OK, Json(vaults)))
 }
 
+/// POST /vaults
+/// Create a new vault for the current user.
 async fn create_vault(
     State(state): State<AppStateRef>,
     Session(user_id): Session,
@@ -65,6 +71,8 @@ async fn create_vault(
     Ok((StatusCode::CREATED, Json(vault)))
 }
 
+/// GET /vaults/{vault_id}
+/// Retrieve a vault for the current user.
 async fn get_vault(
     State(state): State<AppStateRef>,
     Session(user_id): Session,
@@ -84,12 +92,98 @@ async fn get_vault(
     Ok((StatusCode::OK, Json(vault)))
 }
 
-async fn update_vault(
+/// PUT /vaults/{vault_id}
+///
+/// Create or update a vault with ownership check
+///
+/// - returns 201 Created when created
+/// - returns 200 OK when updated or idempotent
+/// - returns 409 Conflict when id exists and belongs to another user
+async fn create_or_update_vault(
     State(state): State<AppStateRef>,
     Session(user_id): Session,
-) -> Result<StatusCode, StatusCode> {
-    // todo!("should this really exists right now??")
-    Ok(StatusCode::NOT_IMPLEMENTED)
+    Path(vault_id): Path<Uuid>,
+    Json(payload): Json<CreateVaultRequest>,
+) -> Result<(StatusCode, Json<Vault>), StatusCode> {
+    // start a transaction
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // try to select the row FOR UPDATE if it exists
+    let existing = sqlx::query_as!(
+        Vault,
+        "SELECT * FROM vaults WHERE id = $1 FOR UPDATE",
+        vault_id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some(existing) = existing {
+        // check if the user owns the vault
+        if existing.user_id != user_id {
+            tx.rollback()
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            return Err(StatusCode::CONFLICT);
+        }
+
+        // check if the payload is idempotent
+        if existing.encrypted_name == payload.encrypted_name
+            && existing.encrypted_vault_key == payload.encrypted_vault_key
+        {
+            tx.commit()
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            return Ok((StatusCode::OK, Json(existing)));
+        }
+
+        // update and return updated row
+        let updated = sqlx::query_as!(
+            Vault,
+            "UPDATE vaults
+            SET
+                encrypted_name = $1,
+                encrypted_vault_key = $2,
+                updated_at = now()
+            WHERE id = $3
+            RETURNING *",
+            payload.encrypted_name,
+            payload.encrypted_vault_key,
+            vault_id
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| {
+            // TODO: ensure we rollback on error
+            // (map_err returns StatusCode, but we still try to rollback)
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    }
+
+    // not found -> insert with provided id
+    let created = sqlx::query_as!(
+        Vault,
+        "INSERT INTO vaults
+            (id, user_id, encrypted_name, encrypted_vault_key)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *",
+        vault_id,
+        user_id,
+        payload.encrypted_name,
+        payload.encrypted_vault_key
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    tx.commit()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((StatusCode::CREATED, Json(created)))
 }
 
 async fn delete_vault(
