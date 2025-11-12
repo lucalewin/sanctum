@@ -1,3 +1,4 @@
+use sanctum_shared::models::{Record, Vault};
 use secrecy::{SecretSlice, SecretString};
 use serde::{Deserialize, Serialize};
 use time::UtcDateTime;
@@ -47,4 +48,29 @@ pub struct EncryptedRecord {
     pub encrypted_data_blob: String,
     pub created_at: UtcDateTime,
     pub updated_at: UtcDateTime,
+}
+
+impl From<Vault> for EncryptedVault {
+    fn from(value: Vault) -> Self {
+        Self {
+            id: value.id,
+            encrypted_vault_key: value.encrypted_vault_key,
+            encrypted_name: value.encrypted_name,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
+impl From<Record> for EncryptedRecord {
+    fn from(value: Record) -> Self {
+        Self {
+            id: value.id,
+            vault_id: value.vault_id,
+            encrypted_record_key: value.encrypted_record_key,
+            encrypted_data_blob: value.encrypted_data_blob,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
 }

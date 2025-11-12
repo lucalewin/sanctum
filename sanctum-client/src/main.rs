@@ -10,23 +10,33 @@ async fn main() {
     let client = LockedClient::from_config(config).unwrap();
     let client = client.unlock_offline(password).unwrap();
 
-    // do all the desired operations here
-    // such as creating a vault, updating a record, etc.
-
-    let vault = client.create_vault("My Vault").unwrap();
+    let vault = client.create_vault("Personal").unwrap();
     let record = client
         .create_record(vault.id, "{\"key\": \"value\"}")
         .unwrap();
 
-    let updated_record = client
-        .update_record(vault.id, record.id, "{\"key\": \"updated_value\"}")
+    let other_record = client
+        .create_record(vault.id, "{\"key\": \"other_value\"}")
         .unwrap();
 
-    let vaults = client.list_vaults();
-    let records = client.list_records(vault.id);
+    dbg!(&record);
+    dbg!(&other_record);
+
+    dbg!(client.list_records(vault.id));
 
     client.delete_record(vault.id, record.id).unwrap();
+    client.delete_record(vault.id, other_record.id).unwrap();
     client.delete_vault(vault.id).unwrap();
+
+    dbg!(client.list_vaults());
+
+    for vault in client.list_vaults() {
+        for record in client.list_records(vault.id) {
+            dbg!("deleting", &record.id);
+            client.delete_record(vault.id, record.id).unwrap();
+        }
+        client.delete_vault(vault.id).unwrap();
+    }
 
     let _ = client.lock();
 }

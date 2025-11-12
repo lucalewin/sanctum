@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ApiClient {
     base_url: String,
     access_token: String,
