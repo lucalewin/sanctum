@@ -14,23 +14,20 @@ pub fn server_start(
     password_file: &[u8],
     client_start: &[u8],
 ) -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
-    let password_file =
-        ServerRegistration::<DefaultCipherSuite>::deserialize(password_file).unwrap();
+    let password_file = ServerRegistration::<DefaultCipherSuite>::deserialize(password_file)?;
 
     let login_start_result = ServerLogin::start(
         &mut OsRng,
         setup,
         Some(password_file),
-        CredentialRequest::deserialize(client_start).unwrap(),
+        CredentialRequest::deserialize(client_start)?,
         account,
         ServerLoginParameters::default(),
-    )
-    .unwrap();
+    )?;
 
     Ok((
         login_start_result.state.serialize().to_vec(),
         login_start_result.message.serialize().to_vec(),
-        // Bytes::copy_from_slice(&login_start_result.message.serialize()[..]),
     ))
 }
 
@@ -38,7 +35,7 @@ pub fn server_finish(client_finish: &[u8], server_start: &[u8]) -> Result<(), Bo
     let start_state = ServerLogin::<DefaultCipherSuite>::deserialize(server_start)?;
 
     let _ = start_state.finish(
-        CredentialFinalization::deserialize(&client_finish).unwrap(),
+        CredentialFinalization::deserialize(&client_finish)?,
         ServerLoginParameters::default(),
     )?;
 

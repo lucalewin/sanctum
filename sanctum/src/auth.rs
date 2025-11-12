@@ -64,8 +64,11 @@ pub async fn register_finish(
     State(state): State<AppStateRef>,
     Json(payload): Json<RegistrationFinishRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    let decoded_client_finish = BASE64_STANDARD.decode(payload.client_finish).unwrap();
-    let password_file = sanctum_shared::register::server_finish(&decoded_client_finish).unwrap();
+    let decoded_client_finish = BASE64_STANDARD
+        .decode(payload.client_finish)
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let password_file = sanctum_shared::register::server_finish(&decoded_client_finish)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let encoded_password_file = BASE64_STANDARD.encode(password_file);
 
     sqlx::query!(

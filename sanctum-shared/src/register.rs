@@ -14,7 +14,7 @@ pub fn server_start(
 ) -> Result<Bytes, Box<dyn std::error::Error>> {
     match ServerRegistration::<DefaultCipherSuite>::start(
         setup,
-        RegistrationRequest::deserialize(client_start).unwrap(),
+        RegistrationRequest::deserialize(client_start)?,
         account,
     ) {
         Ok(start_result) => Ok(Bytes::copy_from_slice(
@@ -25,8 +25,7 @@ pub fn server_start(
 }
 
 pub fn server_finish(client_finish: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let registration_upload =
-        RegistrationUpload::<DefaultCipherSuite>::deserialize(client_finish).unwrap();
+    let registration_upload = RegistrationUpload::<DefaultCipherSuite>::deserialize(client_finish)?;
 
     let password_file = ServerRegistration::finish(registration_upload);
 
@@ -58,7 +57,7 @@ pub fn client_finish(
     match client_state.finish(
         &mut rng,
         password,
-        RegistrationResponse::deserialize(server_message).unwrap(),
+        RegistrationResponse::deserialize(server_message)?,
         ClientRegistrationFinishParameters::default(),
     ) {
         Ok(finish) => Ok(Bytes::copy_from_slice(&finish.message.serialize()[..])),
