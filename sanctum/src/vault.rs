@@ -2,11 +2,13 @@
 
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     routing::get,
 };
 use sanctum_shared::models::{CreateRecordRequest, CreateVaultRequest, Record, Vault};
+use serde::Deserialize;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
@@ -34,16 +36,55 @@ pub fn routes() -> Router<AppStateRef> {
         )
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ListVaultsQuery {
+    /// The timestamp to start listing vaults from in UNIX seconds.
+    since: Option<i64>,
+}
+
 /// GET /vaults
 /// List all vaults for the current user.
 async fn list_vaults(
     State(state): State<AppStateRef>,
     Session(user_id): Session,
+    Query(params): Query<ListVaultsQuery>,
 ) -> Result<(StatusCode, Json<Vec<Vault>>), StatusCode> {
-    let vaults = sqlx::query_as!(Vault, "SELECT * FROM vaults WHERE user_id = $1", user_id)
+    let result = if let Some(timestamp) = params.since {
+        let since =
+            OffsetDateTime::from_unix_timestamp(timestamp).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+        // fetch all vaults for the current user
+        // which were created or updated since the given timestamp
+        sqlx::query_as!(
+            Vault,
+            r#"
+            SELECT * FROM vaults
+            WHERE user_id = $1
+                AND updated_at > $2
+            "#,
+            user_id,
+            since
+        )
         .fetch_all(&state.db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    } else {
+        // fetch all vaults for the current user
+        sqlx::query_as!(
+            Vault,
+            r#"
+            SELECT * FROM vaults
+            WHERE user_id = $1
+            "#,
+            user_id
+        )
+        .fetch_all(&state.db)
+        .await
+    };
+
+    let vaults = result.map_err(|e| {
+        tracing::error!("Failed to fetch vaults: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok((StatusCode::OK, Json(vaults)))
 }
