@@ -1,0 +1,12 @@
+.env
+.env.example
+.gitignore
+.dockerignore
+.state.safe
+compose.yml
+Dockerfile
+architecture.md
+README.md
+TODO.md
+
+/target
