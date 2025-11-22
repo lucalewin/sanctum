@@ -1,0 +1,16 @@
+[package]
+name = "pass"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+argon2 = "0.5.3"
+base64 = "0.22.1"
+chacha20poly1305 = "0.10.1"
+rusqlite = { version = "0.37.0", features = ["time", "uuid"] }
+secrecy = "0.10.3"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0"
+time = { version = "0.3.44", features = ["serde"] }
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
+thiserror = "2.0"
