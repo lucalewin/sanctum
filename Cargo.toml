@@ -1,3 +1,4 @@
 [workspace]
 members = ["sanctum", "sanctum-client", "sanctum-shared", "sanctum-tui"]
+exclude = ["pass", "desktop", "cli"]
 resolver = "3"
