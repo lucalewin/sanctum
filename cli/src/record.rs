@@ -41,7 +41,6 @@ pub fn create_record(
 
     crate::storage::create_record(&conn, &vault.id, &encrypted_payload)?;
 
-    println!("Created a new record...");
     Ok(())
 }
 
@@ -50,7 +49,6 @@ pub fn list_records(
     vault: String,
     keys: VaultKeys,
 ) -> Result<Vec<Item>, Box<dyn std::error::Error>> {
-    println!("Listing all records...");
     let vault_name = vault.to_lowercase();
     let vault = crate::vault::list_vaults(conn)?
         .into_iter()
@@ -82,12 +80,38 @@ pub fn list_records(
     Ok(records)
 }
 
-pub fn view_record(vault: String, name: String) -> Result<String, Box<dyn std::error::Error>> {
-    println!("Viewing a record...");
+pub fn view_record(
+    conn: &Connection,
+    vault: String,
+    name: String,
+    keys: VaultKeys,
+) -> Result<Item, Box<dyn std::error::Error>> {
+    let records = list_records(conn, vault, keys)?;
 
-    Ok("Record details".to_string())
+    records
+        .into_iter()
+        .find(|record| match record {
+            Item::Password { title, .. } => title.to_lowercase() == name.to_lowercase(),
+        })
+        .ok_or_else(|| "Record not found".into())
 }
 
-pub fn delete_record() {
-    println!("Deleting a record...");
+pub fn delete_record(
+    conn: &Connection,
+    vault: String,
+    name: String,
+    keys: VaultKeys,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // let records = list_records(conn, vault, keys)?;
+
+    // let record = records
+    //     .into_iter()
+    //     .find(|record| match record {
+    //         Item::Password { title, .. } => title.to_lowercase() == name.to_lowercase(),
+    //     })
+    //     .ok_or_else(|| "Record not found".to_string())?;
+
+    // crate::storage::delete_record(conn, record., name)?;
+
+    Ok(())
 }

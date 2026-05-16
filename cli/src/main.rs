@@ -2,6 +2,7 @@ use argon2::password_hash::SaltString;
 use argon2::{PasswordHash, PasswordVerifier};
 use clap::{Parser, Subcommand};
 use cli::crypto::VaultKeys;
+use cli::record::Item;
 use cli::storage::Metadata;
 use cli::{crypto, db_connection, password::PasswordOptions};
 
@@ -51,6 +52,9 @@ enum PasswordCommand {
         uppercase: bool,
         #[arg(short, long, default_value = "true")]
         symbols: bool,
+
+        #[arg(long)]
+        copy: bool,
     },
     Score {
         #[arg(short, long)]
@@ -94,7 +98,7 @@ enum ItemCommand {
     },
     Delete {
         #[arg(long)]
-        vault: Option<String>,
+        vault: String,
         #[arg(long)]
         name: String,
     },
@@ -145,7 +149,6 @@ enum CreateItem {
 
 fn main() {
     let cli = Cli::parse();
-    // let client = cli::Client::login("mypassword");
 
     match cli.command {
         Commands::Onboard {} => cli::onboarding::onboard(),
@@ -156,6 +159,7 @@ fn main() {
                 numbers,
                 uppercase,
                 symbols,
+                copy,
             } => {
                 let options = PasswordOptions {
                     length,
@@ -164,7 +168,12 @@ fn main() {
                     symbols,
                 };
                 let password = generate_password(&options);
-                println!("{}", password);
+                if copy {
+                    let mut clipboard = arboard::Clipboard::new().unwrap();
+                    clipboard.set_text(password.clone()).unwrap();
+                } else {
+                    println!("{}", password);
+                }
             }
             PasswordCommand::Score { password } => {
                 let score = score_password(&password);
@@ -217,14 +226,20 @@ fn main() {
                     let items = cli::record::list_records(&conn, vault, keys);
 
                     for item in items.unwrap() {
-                        println!("{:?}", item);
+                        match item {
+                            Item::Password { title, .. } => {
+                                println!("Title: {} | Type=Password", title)
+                            }
+                        }
                     }
                 }
                 ItemCommand::View { vault, name } => {
-                    let record = cli::record::view_record(vault, name).unwrap();
-                    println!("{}", record);
+                    let record = cli::record::view_record(&conn, vault, name, keys).unwrap();
+                    println!("{:?}", record);
                 }
-                ItemCommand::Delete { .. } => cli::record::delete_record(),
+                ItemCommand::Delete { vault, name } => {
+                    cli::record::delete_record(&conn, vault, name, keys).unwrap();
+                }
             }
         }
         Commands::Sync {} => (),
@@ -248,7 +263,7 @@ fn login() -> (Connection, VaultKeys) {
             {
                 Ok(())
             } else {
-                Err("Password must be longer than 3")
+                Err("Password is wrong")
             }
         })
         .interact()

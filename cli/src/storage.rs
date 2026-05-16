@@ -97,6 +97,14 @@ pub fn list_records(conn: &Connection, vault_id: &str) -> Result<Vec<Vec<u8>>> {
     Ok(records)
 }
 
+pub fn delete_record(conn: &Connection, vault_id: &str, item_id: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM items WHERE vault_id = ?1 AND id = ?2",
+        (vault_id, item_id),
+    )?;
+    Ok(())
+}
+
 pub fn get_record_by_title(
     conn: &Connection,
     vault_id: &str,
