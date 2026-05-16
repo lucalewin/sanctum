@@ -44,10 +44,9 @@ pub fn derive_subkeys(root_key: &[u8; 32]) -> VaultKeys {
     let mut enc_key = [0u8; 32];
     let mut mac_key = [0u8; 32];
 
-    // The strings "encryption" and "mac" are Info strings.
+    // The strings "enc" and "mac" are Info strings.
     // They guarantee the two resulting keys are mathematically distinct.
-    hk.expand(b"encryption", &mut enc_key)
-        .expect("HKDF expand failed");
+    hk.expand(b"enc", &mut enc_key).expect("HKDF expand failed");
     hk.expand(b"mac", &mut mac_key).expect("HKDF expand failed");
 
     VaultKeys { enc_key, mac_key }
@@ -57,17 +56,17 @@ use hmac::{Hmac, Mac};
 
 type HmacSha256 = Hmac<Sha256>;
 
-pub fn generate_blind_index(mac_key: &[u8; 32], plaintext_title: &str) -> String {
-    let mut mac = <HmacSha256 as hmac::KeyInit>::new_from_slice(mac_key).unwrap();
+// pub fn generate_blind_index(mac_key: &[u8; 32], plaintext_title: &str) -> String {
+//     let mut mac = <HmacSha256 as hmac::KeyInit>::new_from_slice(mac_key).unwrap();
 
-    // Lowercase ensures case-insensitive CLI lookups
-    mac.update(plaintext_title.to_lowercase().as_bytes());
+//     // Lowercase ensures case-insensitive CLI lookups
+//     mac.update(plaintext_title.to_lowercase().as_bytes());
 
-    let result = mac.finalize();
+//     let result = mac.finalize();
 
-    // Convert the raw bytes to a hex string to store in the `title_hmac` TEXT column
-    hex::encode(result.into_bytes())
-}
+//     // Convert the raw bytes to a hex string to store in the `title_hmac` TEXT column
+//     hex::encode(result.into_bytes())
+// }
 
 pub fn encrypt_payload(
     key: &[u8; 32],
@@ -95,7 +94,7 @@ pub fn encrypt_payload(
 }
 
 pub fn decrypt_payload(
-    key: &[u8; 32],
+    key: &Key,
     ciphertext: &[u8],
     nonce_bytes: &[u8; 24],
     vault_id: &str,

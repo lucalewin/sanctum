@@ -1,6 +1,11 @@
 use rand::seq::{IndexedRandom, SliceRandom};
 
-use crate::PasswordOptions;
+pub struct PasswordOptions {
+    pub length: usize,
+    pub numbers: bool,
+    pub uppercase: bool,
+    pub symbols: bool,
+}
 
 pub fn generate_password(options: &PasswordOptions) -> String {
     // Return early if the requested length is 0
