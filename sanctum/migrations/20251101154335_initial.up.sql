@@ -26,7 +26,6 @@ CREATE TABLE records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     vault_id UUID NOT NULL REFERENCES vaults(id) ON DELETE CASCADE,
 
-    encrypted_record_key TEXT NOT NULL,
     encrypted_data_blob TEXT NOT NULL,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

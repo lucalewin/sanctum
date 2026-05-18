@@ -1,0 +1,10 @@
+[package]
+name = "desktop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gpui = "0.2.2"
+cli = { path = "../" }
+rusqlite = "0.39.0"
+gpui-component = "0.5.1"

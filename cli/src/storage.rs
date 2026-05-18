@@ -1,5 +1,9 @@
+use directories::ProjectDirs;
 use rusqlite::{Connection, Result};
-use std::path::Path;
+use std::{
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 pub fn open_vault_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
     let conn = Connection::open(db_path)?;
@@ -17,13 +21,32 @@ pub fn open_vault_db<P: AsRef<Path>>(db_path: P) -> Result<Connection> {
     Ok(conn)
 }
 
+pub fn db_connection() -> Result<rusqlite::Connection, String> {
+    let Some(project_dirs) = ProjectDirs::from("dev", "lucalewin", "sanctum") else {
+        return Err("Could not determine project directories.".to_string());
+    };
+
+    let data_dir = project_dirs.data_dir();
+
+    let conn = match crate::storage::open_vault_db(data_dir.join("vault.db")) {
+        Ok(conn) => conn,
+        Err(e) => {
+            return Err(format!("Failed to open vault database: {}", e));
+        }
+    };
+
+    Ok(conn)
+}
+
 pub fn init_schema(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS vaults (
             id TEXT PRIMARY KEY, -- Storing UUID as TEXT
             encrypted_name BLOB NOT NULL,
-            encrypted_vsk BLOB NOT NULL
+            encrypted_vsk BLOB NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
         ) STRICT;
 
         CREATE TABLE IF NOT EXISTS items (
@@ -50,16 +73,30 @@ pub fn create_vault(
     encrypted_name: &[u8],
     encrypted_vsk: &[u8],
 ) -> Result<()> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs() as i64;
+
     conn.execute(
-        "INSERT INTO vaults (id, encrypted_name, encrypted_vsk) VALUES (?1, ?2, ?3)",
-        (id, encrypted_name, encrypted_vsk),
+        "INSERT INTO vaults (id, encrypted_name, encrypted_vsk, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        (id, encrypted_name, encrypted_vsk, timestamp, timestamp),
     )?;
     Ok(())
 }
 
-pub fn list_vaults(conn: &Connection) -> Result<Vec<(String, Vec<u8>, Vec<u8>)>> {
-    let mut stmt = conn.prepare("SELECT id, encrypted_name, encrypted_vsk FROM vaults")?;
-    let vault_iter = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
+pub fn list_vaults(conn: &Connection) -> Result<Vec<(String, Vec<u8>, Vec<u8>, i64, i64)>> {
+    let mut stmt = conn
+        .prepare("SELECT id, encrypted_name, encrypted_vsk, created_at, updated_at FROM vaults")?;
+    let vault_iter = stmt.query_map([], |row| {
+        Ok((
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+        ))
+    })?;
 
     let mut vaults = Vec::new();
     for vault in vault_iter {
@@ -77,18 +114,25 @@ pub fn create_record(conn: &Connection, vault_id: &str, encrypted_payload: &[u8]
     let id = uuid::Uuid::new_v4().to_string();
     // let updated_at = chrono::Utc::now().timestamp();
 
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs() as i64;
+
     conn.execute(
         "INSERT INTO items (id, vault_id, encrypted_payload, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-        (id, vault_id, encrypted_payload, 0, 0), // FIXME: updated_at should be current timestamp, but for testing we set it to 0. Use chrono crate to get current timestamp in production.
+        (id, vault_id, encrypted_payload, timestamp, timestamp), // FIXME: updated_at should be current timestamp, but for testing we set it to 0. Use chrono crate to get current timestamp in production.
     )?;
     Ok(())
 }
 
-pub fn list_records(conn: &Connection, vault_id: &str) -> Result<Vec<Vec<u8>>> {
+pub fn list_records(conn: &Connection, vault_id: &str) -> Result<Vec<(String, Vec<u8>, u32, u32)>> {
     let mut stmt = conn.prepare(
-        "SELECT encrypted_payload FROM items WHERE vault_id = ?1 ORDER BY updated_at DESC",
+        "SELECT id, encrypted_payload, created_at, updated_at FROM items WHERE vault_id = ?1 ORDER BY updated_at DESC",
     )?;
-    let record_iter = stmt.query_map([vault_id], |row| Ok(row.get(0)?))?;
+    let record_iter = stmt.query_map([vault_id], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+    })?;
 
     let mut records = Vec::new();
     for record in record_iter {
@@ -103,23 +147,6 @@ pub fn delete_record(conn: &Connection, vault_id: &str, item_id: &str) -> Result
         (vault_id, item_id),
     )?;
     Ok(())
-}
-
-pub fn get_record_by_title(
-    conn: &Connection,
-    vault_id: &str,
-    title_hmac: &str,
-) -> Result<Option<(String, i64)>> {
-    let mut stmt = conn.prepare(
-        "SELECT encrypted_payload, updated_at FROM items WHERE vault_id = ?1 AND title_hmac = ?2",
-    )?;
-    let mut rows = stmt.query((vault_id, title_hmac))?;
-
-    if let Some(row) = rows.next()? {
-        Ok(Some((row.get(0)?, row.get(1)?)))
-    } else {
-        Ok(None)
-    }
 }
 
 pub struct Metadata;

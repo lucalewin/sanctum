@@ -72,7 +72,6 @@ pub struct Vault {
 pub struct Record {
     pub id: Uuid,
     pub vault_id: Uuid,
-    pub encrypted_record_key: String,
     pub encrypted_data_blob: String,
     pub created_at: UtcDateTime,
     pub updated_at: UtcDateTime,
@@ -86,6 +85,6 @@ pub struct CreateVaultRequest {
 
 #[derive(Serialize, Deserialize)]
 pub struct CreateRecordRequest {
-    pub encrypted_record_key: String,
+    // pub encrypted_record_key: String,
     pub encrypted_data_blob: String,
 }

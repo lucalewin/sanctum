@@ -1,19 +1,11 @@
-use argon2::password_hash::SaltString;
-use argon2::{PasswordHash, PasswordVerifier};
 use clap::{Parser, Subcommand};
-use cli::crypto::VaultKeys;
-use cli::record::Item;
-use cli::storage::Metadata;
-use cli::{crypto, db_connection, password::PasswordOptions};
+use cli::login;
+use cli::password::PasswordOptions;
+use cli::record::Entry;
 
+use cli::password::{generate_password, score_password};
+use cli::sync::sync;
 use cli::vault::create_vault;
-use cli::{
-    password::{generate_password, score_password},
-    // sync::sync,
-};
-use dialoguer::Password;
-use dialoguer::theme::ColorfulTheme;
-use rusqlite::Connection;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -184,7 +176,7 @@ fn main() {
             let (conn, keys) = login();
             match cmd {
                 VaultCommand::Create { name } => {
-                    create_vault(&conn, &name, keys).unwrap();
+                    create_vault(&conn, &name, &keys).unwrap();
                 }
                 VaultCommand::List => {
                     let vaults = cli::vault::list_vaults(&conn).unwrap();
@@ -197,7 +189,9 @@ fn main() {
                     }
                 }
                 VaultCommand::Delete { name } => {
-                    cli::vault::delete_vault(&conn, &name, keys).unwrap();
+                    if let Err(e) = cli::vault::delete_vault(&conn, &name, keys) {
+                        eprintln!("Error deleting vault: {}", e);
+                    }
                 }
             }
         }
@@ -212,7 +206,7 @@ fn main() {
                         password,
                         url,
                     } => {
-                        let item = cli::record::Item::Password {
+                        let item = cli::record::Entry::Password {
                             title,
                             username,
                             password,
@@ -223,58 +217,25 @@ fn main() {
                     _ => todo!(),
                 },
                 ItemCommand::List { vault } => {
-                    let items = cli::record::list_records(&conn, vault, keys);
+                    let items = cli::record::list_records(&conn, &vault, &keys);
 
                     for item in items.unwrap() {
-                        match item {
-                            Item::Password { title, .. } => {
-                                println!("Title: {} | Type=Password", title)
+                        match item.data {
+                            Entry::Password { title, .. } => {
+                                println!("ID: {}, Title: {}, Type=Password", item.id, title)
                             }
                         }
                     }
                 }
                 ItemCommand::View { vault, name } => {
                     let record = cli::record::view_record(&conn, vault, name, keys).unwrap();
-                    println!("{:?}", record);
+                    println!("{:#?}", record.data);
                 }
                 ItemCommand::Delete { vault, name } => {
                     cli::record::delete_record(&conn, vault, name, keys).unwrap();
                 }
             }
         }
-        Commands::Sync {} => (),
+        Commands::Sync {} => sync(),
     }
-}
-
-fn login() -> (Connection, VaultKeys) {
-    let conn = db_connection().expect("Failed to connect to vault database");
-    let password_hash = Metadata::get_str(&conn, "password_hash")
-        .expect("Failed to retrieve password hash from metadata")
-        .unwrap();
-
-    let password = Password::with_theme(&ColorfulTheme::default())
-        .with_prompt("Password")
-        .report(false)
-        .validate_with(|input: &String| -> Result<(), &str> {
-            let hash = PasswordHash::new(&password_hash).unwrap();
-            if argon2::Argon2::default()
-                .verify_password(input.as_bytes(), &hash)
-                .is_ok()
-            {
-                Ok(())
-            } else {
-                Err("Password is wrong")
-            }
-        })
-        .interact()
-        .unwrap();
-
-    let master_salt = Metadata::get_str(&conn, "salt")
-        .expect("Failed to retrieve master salt from metadata")
-        .unwrap();
-    let root_key =
-        crypto::derive_master_key(&password, &SaltString::from_b64(&master_salt).unwrap());
-    let keys = crypto::derive_subkeys(&root_key);
-
-    (conn, keys)
 }

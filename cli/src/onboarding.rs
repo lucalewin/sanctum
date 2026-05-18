@@ -5,6 +5,7 @@ use directories::ProjectDirs;
 
 use crate::{
     crypto::{derive_master_key, derive_subkeys},
+    remote::register,
     storage::{Metadata, init_schema, open_vault_db},
     vault::create_vault,
 };
@@ -64,7 +65,7 @@ pub fn onboard() {
 
 fn create_account(mut conn: rusqlite::Connection) {
     println!("Create new account");
-    let mail: String = Input::with_theme(&ColorfulTheme::default())
+    let email: String = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("Email")
         .validate_with({
             move |input: &String| -> Result<(), &str> {
@@ -92,25 +93,31 @@ fn create_account(mut conn: rusqlite::Connection) {
         .unwrap();
 
     let password_salt = SaltString::generate(&mut OsRng);
+
+    println!("Creating online account...");
+    register(&email, &password, &password_salt).unwrap();
+    println!("Online account created successfully.");
+
     let argon2 = argon2::Argon2::default();
     let password_hash = argon2
         .hash_password(password.as_bytes(), &password_salt)
         .unwrap();
 
     let master_salt = SaltString::generate(&mut OsRng);
-    let master_key = derive_master_key(&password, &master_salt);
+    let master_key = derive_master_key(&password, &master_salt).unwrap();
     let keys = derive_subkeys(&master_key);
 
     let tx = conn.transaction().unwrap();
 
-    Metadata::set_str(&tx, "email", mail.as_str()).unwrap();
+    Metadata::set_str(&tx, "email", email.as_str()).unwrap();
     Metadata::set_str(&tx, "password_hash", password_hash.to_string().as_str()).unwrap();
     Metadata::set_str(&tx, "salt", master_salt.as_str()).unwrap();
+    Metadata::set_str(&tx, "last_sync_timestamp", "0").unwrap();
 
     let default_vault_title = "Personal".to_lowercase();
-    let enc_vault = create_vault(&tx, &default_vault_title, keys).unwrap();
+    let enc_vault = create_vault(&tx, &default_vault_title, &keys).unwrap();
 
-    Metadata::set_str(&tx, "default_vault_id", &enc_vault.id).unwrap();
+    Metadata::set_str(&tx, "default_vault_id", &enc_vault.id.to_string()).unwrap();
 
     tx.commit().unwrap();
 }

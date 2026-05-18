@@ -1,12 +1,12 @@
-use chacha20poly1305::{Key, XChaCha20Poly1305};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use crate::crypto::VaultKeys;
+use crate::{crypto::VaultKeys, error::Error};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
-pub enum Item {
+pub enum Entry {
     Password {
         title: String,
         username: String,
@@ -15,10 +15,19 @@ pub enum Item {
     },
 }
 
+#[derive(Debug)]
+pub struct Item {
+    pub id: Uuid,
+    pub vault_id: Uuid,
+    pub data: Entry,
+    pub created_at: u32,
+    pub updated_at: u32,
+}
+
 pub fn create_record(
     conn: &Connection,
     vault: String,
-    item: Item,
+    item: Entry,
     keys: VaultKeys,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let vault = crate::vault::list_vaults(conn)?
@@ -32,24 +41,27 @@ pub fn create_record(
     let vault_key = vault.decrypt_vsk(&keys)?;
     let encrypted_payload = {
         let item_json = serde_json::to_vec(&item)?;
-        let (item_ciphertext, item_nonce) =
-            crate::crypto::encrypt_payload(&vault_key.try_into().unwrap(), &item_json, &vault.id);
+        let (item_ciphertext, item_nonce) = crate::crypto::encrypt_payload(
+            &vault_key.try_into().unwrap(),
+            &item_json,
+            &vault.id.to_string(),
+        );
         let mut encrypted_payload = item_nonce.to_vec();
         encrypted_payload.extend_from_slice(&item_ciphertext);
         encrypted_payload
     };
 
-    crate::storage::create_record(&conn, &vault.id, &encrypted_payload)?;
+    crate::storage::create_record(&conn, &vault.id.to_string(), &encrypted_payload)?;
 
     Ok(())
 }
 
 pub fn list_records(
     conn: &Connection,
-    vault: String,
-    keys: VaultKeys,
-) -> Result<Vec<Item>, Box<dyn std::error::Error>> {
-    let vault_name = vault.to_lowercase();
+    vault_name: &str,
+    keys: &VaultKeys,
+) -> Result<Vec<Item>, Error> {
+    let vault_name = vault_name.to_lowercase();
     let vault = crate::vault::list_vaults(conn)?
         .into_iter()
         .find(|v| {
@@ -60,23 +72,30 @@ pub fn list_records(
 
     let vault_key = vault.decrypt_vsk(&keys)?;
 
-    let records = crate::storage::list_records(&conn, &vault.id).unwrap();
-    let records = records
+    let records = crate::storage::list_records(&conn, &vault.id.to_string())?
         .into_iter()
         .map(|record| {
-            let (nonce_slice, ciphertext) = record.split_at(24);
+            let (nonce_slice, ciphertext) = record.1.split_at(24);
             let mut nonce = [0u8; 24];
             nonce.copy_from_slice(nonce_slice);
             let payload_bytes = crate::crypto::decrypt_payload(
-                Key::from_slice(&vault_key),
+                &vault_key.as_slice().try_into().unwrap(),
                 &ciphertext,
                 &nonce,
-                &vault.id,
+                &vault.id.to_string(),
             )
             .unwrap();
-            serde_json::from_slice(&payload_bytes).unwrap()
+
+            Item {
+                id: Uuid::parse_str(&record.0).unwrap(),
+                vault_id: vault.id.clone(),
+                data: serde_json::from_slice(&payload_bytes).unwrap(),
+                created_at: record.2,
+                updated_at: record.3,
+            }
         })
         .collect();
+
     Ok(records)
 }
 
@@ -86,16 +105,17 @@ pub fn view_record(
     name: String,
     keys: VaultKeys,
 ) -> Result<Item, Box<dyn std::error::Error>> {
-    let records = list_records(conn, vault, keys)?;
+    let records = list_records(conn, &vault, &keys)?;
 
     records
         .into_iter()
-        .find(|record| match record {
-            Item::Password { title, .. } => title.to_lowercase() == name.to_lowercase(),
+        .find(|record| match record.data {
+            Entry::Password { ref title, .. } => title.to_lowercase() == name.to_lowercase(),
         })
         .ok_or_else(|| "Record not found".into())
 }
 
+#[allow(unused)]
 pub fn delete_record(
     conn: &Connection,
     vault: String,
